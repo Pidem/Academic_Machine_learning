@@ -1,0 +1,113 @@
+import numpy as np
+dataset=np.random.rand(20,100)
+eps=0.4
+d=int(np.round(24*np.log(100)/((3*eps**2-2*eps**3)*np.log(2))))
+
+mapping_matrix=np.random.rand(d,20)
+
+def mapping(n):
+    return (1/np.sqrt(d))*np.dot(mapping_matrix,np.transpose(dataset[:,n]))
+    
+a=np.random.randint(0,99)
+b=np.random.randint(0,99)
+while a==b:
+    b=np.random.randint(0,99)
+    
+distance_before_mapping = np.linalg.norm(dataset[:,a]-dataset[:,b])
+distance_after_mapping = np.linalg.norm(mapping(a)-mapping(b))
+#eps = 0.4 and d=453
+print("the euclidian distance BEFORE mapping is {}".format(distance_before_mapping))
+print("the euclidian distance AFTER mapping is {}".format(distance_after_mapping))
+
+
+eps=0.3
+d=int(np.round(24*np.log(100)/((3*eps**2-2*eps**3)*np.log(2))))
+# d = 738
+mapping_matrix=np.random.rand(d,20)
+
+distance_before_mapping = np.linalg.norm(dataset[:,a]-dataset[:,b])
+distance_after_mapping = np.linalg.norm(mapping(a)-mapping(b))
+
+print("the euclidian distance AFTER mapping is {}".format(distance_before_mapping))
+print("the euclidian distance AFTER mapping is {}".format(distance_after_mapping))
+
+eps=0.1
+d=int(np.round(24*np.log(100)/((3*eps**2-2*eps**3)*np.log(2))))
+#d = 5695
+mapping_matrix=np.random.rand(d,20)
+
+distance_before_mapping = np.linalg.norm(dataset[:,a]-dataset[:,b])
+distance_after_mapping = np.linalg.norm(mapping(a)-mapping(b))
+
+print("the euclidian distance BEFORE mapping is {}".format(distance_before_mapping))
+print("the euclidian distance AFTER mapping is {}".format(distance_after_mapping))
+
+
+## Dimensionality reduction
+
+D1=np.diag(np.random.choice([-1,1],32))
+gaussianvector=np.random.rand(d+32,1)
+toeplitz_matrix=toeplitz(gaussianvector[:d],gaussianvector[d:])
+
+a=np.random.randint(0,99)
+b=np.random.randint(0,99)
+while a==b:
+    b=np.random.randint(0,99)
+    
+def structured_mapping(n):
+    zer=np.zeros((1,12))
+    
+    vector=list(dataset[:,n])
+    
+    for i in range(12):
+        vector.append(0)
+
+    
+    x11=np.dot(hadamard(32),vector)
+    x12=np.dot(D1,x11)
+    x13=np.dot(toeplitz_matrix,x12)
+    
+    return (1/np.sqrt(d))*x13
+    
+eps=0.4
+d=int(np.round(24*np.log(100)/((3*eps**2-2*eps**3)*np.log(2))))
+
+D1=np.diag(np.random.choice([-1,1],32))
+gaussianvector=np.random.rand(d+32,1)
+toeplitz_matrix=toeplitz(gaussianvector[:d],gaussianvector[d:])
+
+distance_before_mapping = np.linalg.norm(dataset[:,a]-dataset[:,b])
+distance_after_mapping = np.linalg.norm(structured_mapping(a)-structured_mapping(b))
+#eps = 0.4 and d=453
+print("the euclidian distance BEFORE mapping is {}".format(distance_before_mapping))
+
+eps=0.3
+d=int(np.round(24*np.log(100)/((3*eps**2-2*eps**3)*np.log(2))))
+# d = 738
+
+D1=np.diag(np.random.choice([-1,1],32))
+gaussianvector=np.random.rand(d+32,1)
+toeplitz_matrix=toeplitz(gaussianvector[:d],gaussianvector[d:])
+
+
+distance_before_mapping = np.linalg.norm(dataset[:,a]-dataset[:,b])
+distance_after_mapping = np.linalg.norm(mapping(a)-mapping(b))
+
+print("the euclidian distance AFTER mapping is {}".format(distance_before_mapping))
+print("the euclidian distance AFTER mapping is {}".format(distance_after_mapping))
+
+eps=0.1
+d=int(np.round(24*np.log(100)/((3*eps**2-2*eps**3)*np.log(2))))
+# d = 738
+
+D1=np.diag(np.random.choice([-1,1],32))
+gaussianvector=np.random.rand(d+32,1)
+toeplitz_matrix=toeplitz(gaussianvector[:d],gaussianvector[d:])
+
+
+distance_before_mapping = np.linalg.norm(dataset[:,a]-dataset[:,b])
+distance_after_mapping = np.linalg.norm(mapping(a)-mapping(b))
+
+print("the euclidian distance AFTER mapping is {}".format(distance_before_mapping))
+print("the euclidian distance AFTER mapping is {}".format(distance_after_mapping))
+print("the euclidian distance AFTER mapping is {}".format(distance_after_mapping))
