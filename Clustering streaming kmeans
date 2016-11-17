@@ -1,0 +1,189 @@
+import numpy as np
+import math
+dataset=[]
+for i in range(0,50):
+    theta=np.random.uniform(0,2*(math.pi))
+    phi=np.random.uniform(-math.pi/1,math.pi/2)
+    radius=np.random.uniform(0,9)
+    x=radius*math.cos(phi)*math.cos(theta)
+    y=radius*math.cos(phi)*math.sin(theta)
+    z=radius*math.sin(phi)
+    dataset.append([x,y,z])
+for i in range(50,100):
+    theta=np.random.uniform(0,2*(math.pi))
+    phi=np.random.uniform(-math.pi/1,math.pi/2)
+    radius=np.random.uniform(0,9)
+    x=radius*math.cos(phi)*math.cos(theta)
+    y=5+radius*math.cos(phi)*math.sin(theta)
+    z=radius*math.sin(phi)
+    dataset.append([x,y,z])
+#dataset
+len(dataset)
+
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+
+c1=dataset[np.random.randint(100)]
+c2=dataset[np.random.randint(100)]
+dataset=np.array(dataset)
+
+fig = plt.figure()
+ax  = fig.add_subplot(111, projection = '3d')
+ax.scatter(dataset[:50,0], dataset[:50,1], dataset[:50,2], color = 'red', marker = 'o')
+ax.scatter(dataset[50:,0], dataset[50:,1], dataset[50:,2], color = 'blue', marker = 'o')
+ax.scatter(c1[0],c1[1],c1[2],color='red',marker='*')
+ax.scatter(c2[0],c2[1],c2[2],color='blue',marker='*')
+plt.show()
+
+def euclidian_distance(point1,point2):
+    return (point2[0]-point1[0])**2+(point2[1]-point1[1])**2+(point2[2]-point1[2])**2
+    
+def get_new_center(Cluster):
+    x=0
+    y=0
+    z=0
+    for i in range(len(Cluster)):
+        x+=dataset[Cluster[i]][0]
+        y+=dataset[Cluster[i]][1]
+        z+=dataset[Cluster[i]][2]
+    x=x/len(Cluster)
+    y=y/len(Cluster)
+    z=z/len(Cluster)
+    c=(x,y,z)
+    return c
+
+def get_objective():
+    obj=0
+    for item in Cluster1:
+        obj+=euclidian_distance(dataset[item],c1)
+    for item in Cluster2:
+        obj+=euclidian_distance(dataset[item],c2)
+    return obj
+
+def affect_cluster():
+    for i in range(0,100):
+        a=euclidian_distance(dataset[i],c1)
+        b=euclidian_distance(dataset[i],c2)
+        if a<b:
+            Cluster1.append(i)
+        else:
+            Cluster2.append(i)
+
+Counter_iteration=[]
+objective_after_iteration=[]
+objective=0
+#initialization (iteration 0)
+c1=dataset[np.random.randint(100)]    # random first center
+c2=dataset[np.random.randint(100)]    # random first center
+
+Cluster1=[]
+Cluster2=[]
+affect_cluster()
+c1=get_new_center(Cluster1)
+c2=get_new_center(Cluster2)
+Counter_iteration.append(0)
+objective_after_iteration.append(get_objective())
+
+for i in range(1,10):
+    Cluster1=[]
+    Cluster2=[]
+    affect_cluster()
+    c1=get_new_center(Cluster1)
+    c2=get_new_center(Cluster2)
+    objective=get_objective()
+    
+    if i<5 or objective<objective_after_iteration[len(objective_after_iteration)-1]:
+        Counter_iteration.append(i)
+        objective_after_iteration.append(get_objective())
+
+att6_count=Counter_iteration
+att6_objec=objective_after_iteration
+
+plt.scatter(att3_count,att3_objec)
+plt.plot(att3_count,att3_objec)
+plt.scatter(att1_count,att1_objec)
+plt.plot(att1_count,att1_objec)
+plt.scatter(att2_count,att2_objec)
+plt.plot(att2_count,att2_objec)
+plt.scatter(att4_count,att4_objec)
+plt.plot(att4_count,att4_objec)
+plt.scatter(att5_count,att5_objec)
+plt.plot(att5_count,att5_objec)
+plt.scatter(att6_count,att6_objec)
+plt.plot(att6_count,att6_objec)
+plt.show()
+
+dataset=[]
+for i in range(0,50):
+    theta=np.random.uniform(0,2*(math.pi))
+    phi=np.random.uniform(-math.pi/1,math.pi/2)
+    radius=np.random.uniform(0,9)
+    x=radius*math.cos(phi)*math.cos(theta)
+    y=radius*math.cos(phi)*math.sin(theta)
+    z=radius*math.sin(phi)
+    dataset.append([x,y,z])
+for i in range(50,100):
+    theta=np.random.uniform(0,2*(math.pi))
+    phi=np.random.uniform(-math.pi/1,math.pi/2)
+    radius=np.random.uniform(0,9)
+    x=radius*math.cos(phi)*math.cos(theta)
+    y=5+radius*math.cos(phi)*math.sin(theta)
+    z=radius*math.sin(phi)
+    dataset.append([x,y,z])
+#dataset
+len(dataset)
+
+def probability():
+    total_distance=0
+    proba=[]
+    
+    for i in range(100):
+        total_distance+=euclidian_distance(dataset[i],c1)
+    
+    for i in range(100):
+        proba.append(euclidian_distance(dataset[i],c1)/total_distance)
+    return proba
+    
+Counter_iteration=[]
+objective_after_iteration=[]
+objective=0
+#initialization (iteration 0)
+c1=dataset[np.random.randint(100)]    # random first center
+c2=dataset[np.random.choice(list(range(100)),p=probability())]
+
+Cluster1=[]
+Cluster2=[]
+affect_cluster()
+c1=get_new_center(Cluster1)
+c2=get_new_center(Cluster2)
+Counter_iteration.append(0)
+objective_after_iteration.append(get_objective())
+
+for i in range(1,10):
+    Cluster1=[]
+    Cluster2=[]
+    affect_cluster()
+    c1=get_new_center(Cluster1)
+    c2=get_new_center(Cluster2)
+    objective=get_objective()
+    
+    if i<5 or objective<objective_after_iteration[len(objective_after_iteration)-1]:
+        Counter_iteration.append(i)
+        objective_after_iteration.append(get_objective())
+        
+att6_count=Counter_iteration
+att6_objec=objective_after_iteration
+
+plt.scatter(att3_count,att3_objec)
+plt.plot(att3_count,att3_objec)
+plt.scatter(att1_count,att1_objec)
+plt.plot(att1_count,att1_objec)
+plt.scatter(att2_count,att2_objec)
+plt.plot(att2_count,att2_objec)
+plt.scatter(att4_count,att4_objec)
+plt.plot(att4_count,att4_objec)
+plt.scatter(att5_count,att5_objec)
+plt.plot(att5_count,att5_objec)
+plt.scatter(att6_count,att6_objec)
+plt.plot(att6_count,att6_objec)
+plt.show()
