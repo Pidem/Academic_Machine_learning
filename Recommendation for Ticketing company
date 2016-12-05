@@ -1,0 +1,865 @@
+##---------------------------------------------------------------##
+#                           DATA CLEANING                         #
+##---------------------------------------------------------------##
+
+rm(list=ls(all=T))
+
+
+#Customer Data
+getwd()
+setwd("/Users/IanKim/Desktop/BA_Project")
+
+
+##-------------------Install and Load Packages-------------------##
+
+
+#rm(list = setdiff(ls(), lsf.str()))
+
+
+library("pROC")
+library("glmnet")
+library(chron)
+library(stringr)
+library(DBI)
+library(RSQLite)
+library(proto)
+library(gsubfn)
+library(sqldf)
+library("dplyr")
+library("tibble")
+
+
+#-------------------Load Raw CSV Data-------------------#
+
+
+#Ticket<- read.csv2("Vidir-Ticket.csv" ,header=TRUE, sep =",",fileEncoding="UTF-16LE")
+#Sale <- read.csv2("Vidir-Sale.csv" ,header=TRUE, sep =",",fileEncoding="UTF-16LE")
+#SaleItem <- read.csv2("Vidir-SaleItem.csv" ,header=TRUE,fileEncoding="UTF-16LE")
+#EventGenre <- read.csv2("EventGenre.csv" ,header=TRUE,sep=",")
+
+
+
+#-------------------DropColums----Ticket----------------#
+# Remove unnecessary information of the Ticket dataframe
+  # Ticket$HallRowId <- NULL
+  # Ticket$HallSeatId <- NULL
+  # Ticket$CreatedBy <- NULL
+  # Ticket$IsPrinted <- NULL
+  # Ticket$PrintDate <- NULL
+  # Ticket$PrintedBy <- NULL
+  # Ticket$Scanned <- NULL
+  # Ticket$ScannedDate <- NULL
+  # Ticket$ScannedBy <- NULL
+  # Ticket$TickedExpires <- NULL
+  # Ticket$IsDeleted <- NULL
+  # Ticket$DeletedDate <- NULL
+  # Ticket$DeletedBy <- NULL
+  # Ticket$EditedDate <- NULL
+  # Ticket$EditedBy <- NULL
+  # Ticket$OwnerCustomerId <- NULL
+  # Ticket$SessionId <- NULL
+  # Ticket$Seat <- NULL
+  # Ticket$Row <- NULL
+  # Ticket$PriceId <- NULL
+  # Ticket$AllocationId <- NULL
+  # Ticket$PriceItemHallAreaId <- NULL
+  # Ticket$PriceItemId <- NULL
+  # Ticket$ApplicationSource <- NULL
+  # Ticket$Filter <- ifelse(Ticket$TicketStatusId == 3, "TRUE","FALSE")
+  # Ticket <- dplyr::filter(Ticket, Filter == TRUE)
+  # Ticket$Filter <- NULL
+
+
+  # saveRDS(Ticket, "Ticket.rds")
+
+#-------------------DropColums----Sale------------------#
+# Remove unnecessary information of the Sale-dataframe
+  # Sale$SessionId <- NULL
+  # Sale$BrandId <- NULL
+  # Sale$CreatedBy <- NULL
+  # Sale$EventDateVoucherId <- NULL
+
+
+  # saveRSD(Sale, "Sale.rds")
+
+#-------------------DropColums----SaleItem--------------#
+# Remove unnecessary information of the SaleItem-dataframe
+
+  # SaleItem$DeletedBy <-NULL 
+  # SaleItem$SProductId <- NULL
+  # SaleItem$PriceId <- NULL
+  # SaleItem$RefundedDate <- NULL
+  # SaleItem$DiscountId <- NULL
+  # SaleItem$CreatedBy <- NULL
+  # SaleItem$RefundedBy <- NULL
+  # SaleItem$IsDeleted <- NULL
+  # SaleItem$DeletedDate <- NULL
+  # SaleItem$PriceItemHallAreaId <- NULL
+
+
+  # saveRDS(SaleItem, "SaleItem.rds")
+
+#-------------------Create genreDemographics------------#
+
+genreDemographicsCreator <- function(genreMatrix, masterTable) {
+	masterDemographics <- dplyr::transmute(masterTable, CustomerSSN, CustomerZipCode, Age, gender) %>% distinct()
+	genreDemographics <- dplyr::inner_join(masterDemographics, genreMatrix, by = "CustomerSSN")
+    	rm(masterDemographics)
+	
+	# Make sure data types are correct
+	genreDemographics$CustomerZipCode <- as.factor(genreDemographics$CustomerZipCode)
+	genreDemographics$gender <- as.factor(genreDemographics$gender)
+
+	return(genreDemographics)
+}
+
+genreMatrixCreator <- function(masterTable) {
+	blankGenreMatrix <- blankGenreMatrixGen(masterTable)
+
+	# Each event can have up to 6 genres
+
+	print("Working on Genre 1")
+	genreCount1 <- dplyr::group_by(masterTable, CustomerSSN) %>% dplyr::count(Genre1) %>% dplyr::ungroup()
+	genreCount1 <- data.frame(genreCount1)
+	genreMatrix <- genreMatrixInstance(blankGenreMatrix, genreCount1)
+   
+	print("Working on Genre 2")
+	genreCount2 <- dplyr::group_by(masterTable, CustomerSSN) %>% dplyr::count(Genre2) %>% dplyr::ungroup() %>% dplyr::filter(Genre2 != 0)
+	genreCount2 <- data.frame(genreCount2)
+	genreMatrix <- genreMatrixInstance(genreMatrix, genreCount2)
+
+	print("Working on Genre 3")
+	genreCount3 <- dplyr::group_by(masterTable, CustomerSSN) %>% dplyr::count(Genre3) %>% dplyr::ungroup() %>% dplyr::filter(Genre3 != 0)
+	genreCount3 <- data.frame(genreCount3)
+	genreMatrix <- genreMatrixInstance(genreMatrix, genreCount3)
+ 
+	print("Working on Genre 4")
+	genreCount4 <- dplyr::group_by(masterTable, CustomerSSN) %>% dplyr::count(Genre4) %>% dplyr::ungroup() %>% dplyr::filter(Genre4 != 0)
+	genreCount4 <- data.frame(genreCount4)
+	genreMatrix <- genreMatrixInstance(genreMatrix, genreCount4)
+
+	print("Working on Genre 5")
+	genreCount5 <- dplyr::group_by(masterTable, CustomerSSN) %>% dplyr::count(Genre5) %>% dplyr::ungroup() %>% dplyr::filter(Genre5 != 0)
+	genreCount5 <- data.frame(genreCount5)
+	genreMatrix <- genreMatrixInstance(genreMatrix, genreCount5)
+  
+	print("Working on Genre 6")
+	genreCount6 <- dplyr::group_by(masterTable, CustomerSSN) %>% dplyr::count(Genre6) %>% dplyr::ungroup() %>% dplyr::filter(Genre6 != 0)
+	genreCount6 <- data.frame(genreCount6)
+	genreMatrix <- genreMatrixInstance(genreMatrix, genreCount6)
+
+	return(genreMatrix)
+}
+
+# Function inputs
+# GenreMatrix <- a dataframe w/ column 1 being CustomerSSN and the other 98 Columns containing genre purchase info for each SSN
+# GenreCount <- a matrix constructed w/ dplyr::groupby(masterTable, CustomerSSN) %>% dplyr::count(GenreX)
+
+genreMatrixInstance <- function(genreMatrix, genreCount) {
+	ticketsSold <- length(genreCount$CustomerSSN)
+	ssnList <- genreMatrix$CustomerSSN
+
+	for(i in 1:ticketsSold) {
+		print( (i/ticketsSold) * 100 )
+		# If Genre is 0 that means there is no Genre for that index (if run on GenreX X!= 1)
+		if(genreCount[i,2] != 0) {
+			ssn <- genreCount[i,1]
+			genre <- genreCount[i,2]
+			ticketsPurchased <- genreCount[i,3]
+		
+			ssnIndex <- match(ssn, ssnList)
+			genreMatrix[ssnIndex, 1 + genre] <- genreMatrix[ssnIndex, 1 + genre] + ticketsPurchased
+			}
+}
+          
+        return(genreMatrix)
+       	}
+
+#-------------------Create MasterTable------------------#         
+# Function Inputs - Master Table
+
+blankGenreMatrixGen <- function(masterTable) {
+	# Re cast from factor to character to factor to guarantee clean levels
+	ssnList <- data.frame(levels(as.factor(as.character(masterTable$CustomerSSN))))
+	colnames(ssnList)[1] <- "CustomerSSN"
+
+	ssnNum <- nrow(ssnList)
+
+	# There are 98 different genres
+	zeros <- data.frame(mat.or.vec(ssnNum, 98))
+
+	return(cbind(ssnList, zeros))
+}
+
+
+
+#--------CreateCustomer_FinalUSE_FINAL------------------#
+  # Customer1 <- read.table("Vidir-Customer.txt",header=FALSE,sep=";",nrows=500000,fill = TRUE)
+  # Customer2use <- read.table("Vidir-Customer.txt",header=FALSE,sep=";",nrows=440000,skip=500000,fill = TRUE)
+  # Customer3use <- read.table("Vidir-Customer.txt",header=FALSE,sep=";",nrows=270000,skip=940000,fill = TRUE)
+  # Customer4use <- read.table("Vidir-Customer.txt",header=FALSE,sep=";",nrows=260000,skip=1210000,fill = TRUE)
+  # Customer5use <- read.table("Vidir-Customer.txt",header=FALSE,sep=";",skip=1470000,fill = TRUE)
+  # 
+  # 
+  # names(Customer5use) <- c("C1","C2","C3","C4","CustomerId"
+  #                               ,"SourceId"
+  #                               ,"UserGroupId"
+  #                               ,"CustomerSSN"
+  #                               ,"CustomerName"
+  #                               ,"CustomerAddress"
+  #                               ,"CustomerZipCode"
+  #                               ,"CustomerCity"
+  #                               ,"CustomerHomePhone"
+  #                               ,"CustomerWorkPhone"
+  #                               ,"CustomerEmail"
+  #                               ,"CustomerPassword"
+  #                               ,"Description"
+  #                               ,"Country"
+  #                               ,"CreatedDate"
+  #                               ,"CreatedBy"
+  #                               ,"IsDeleted"
+  #                               ,"DeletedDate"
+  #                               ,"DeletedBy")
+  # 
+  # #DROP COLUMNS
+  # Customer1$Country <- NULL
+  # Customer1$Createdby <- NULL
+  # Customer1$IsDeleted <- NULL
+  # Customer1$DeletedDate <- NULL
+  # Customer1$DeletedBy <- NULL
+  # Customer1$C3 <- NULL
+  # Customer1$CustomerAdress <- NULL
+  # Customer1$CustomerHomePhone <- NULL
+  # Customer1$CustomerWorkPhone <- NULL
+  # Customer1$CustomerEmail<- NULL
+  # Customer1$CustomerPassword<- NULL
+  # Customer1$Description<- NULL
+  # 
+  # Customer2use$Country <- NULL
+  # Customer2use$Createdby <- NULL
+  # Customer2use$IsDeleted <- NULL
+  # Customer2use$DeletedDate <- NULL
+  # Customer2use$DeletedBy <- NULL
+  # Customer2use$C3 <- NULL
+  # Customer2use$CustomerAdress <- NULL
+  # Customer2use$CustomerHomePhone <- NULL
+  # Customer2use$CustomerWorkPhone <- NULL
+  # Customer2use$CustomerEmail<- NULL
+  # Customer2use$CustomerPassword<- NULL
+  # Customer2use$Description<- NULL
+  # 
+  # Customer3use$Country <- NULL
+  # Customer3use$Createdby <- NULL
+  # Customer3use$IsDeleted <- NULL
+  # Customer3use$DeletedDate <- NULL
+  # Customer3use$DeletedBy <- NULL
+  # Customer3use$C3 <- NULL
+  # Customer3use$CustomerAdress <- NULL
+  # Customer3use$CustomerHomePhone <- NULL
+  # Customer3use$CustomerWorkPhone <- NULL
+  # Customer3use$CustomerEmail<- NULL
+  # Customer3use$CustomerPassword<- NULL
+  # Customer3use$Description<- NULL
+  # 
+  # Customer4use$Country <- NULL
+  # Customer4use$Createdby <- NULL
+  # Customer4use$IsDeleted <- NULL
+  # Customer4use$DeletedDate <- NULL
+  # Customer4use$DeletedBy <- NULL
+  # Customer4use$C3 <- NULL
+  # Customer4use$CustomerAdress <- NULL
+  # Customer4use$CustomerHomePhone <- NULL
+  # Customer4use$CustomerWorkPhone <- NULL
+  # Customer4use$CustomerEmail<- NULL
+  # Customer4use$CustomerPassword<- NULL
+  # Customer4use$Description<- NULL
+  # 
+  # Customer5use$Country <- NULL
+  # Customer5use$Createdby <- NULL
+  # Customer5use$IsDeleted <- NULL
+  # Customer5use$DeletedDate <- NULL
+  # Customer5use$DeletedBy <- NULL
+  # Customer5use$C3 <- NULL
+  # Customer5use$CustomerAdress <- NULL
+  # Customer5use$CustomerHomePhone <- NULL
+  # Customer5use$CustomerWorkPhone <- NULL
+  # Customer5use$CustomerEmail<- NULL
+  # Customer5use$CustomerPassword<- NULL
+  # Customer5use$Description<- NULL
+        
+  # customer1_error=grep("NULL", FINALLY_Customer_Ready$CustomerSSN)
+  # Customer1_Cleaned=Customer1[-customer1_error,]
+  # FINALLY_Customer_Ready$CustomerZipCode=as.numeric(FINALLY_Customer_Ready$CustomerZipCode)
+  # 
+  # customer2_error=grep("NULL", Customer2use$SourceId)
+  # Customer2_Cleaned = Customer2use[-customer2_error,]
+  # 
+  # customer3_error=grep("NULL", Customer3use$SourceId)
+  # Customer3_Cleaned = Customer3use[-customer3_error,]
+  # 
+  # customer4_error=grep("NULL", Customer4use$SourceId)
+  # Customer4_Cleaned = Customer4use[-customer4_error,]
+  # 
+  # customer5_error=grep("NULL", Customer5use$SourceId)
+  # Customer5_Cleaned = Customer5use[-customer5_error,]
+  # 
+  # JOINED_Customer=rbind(Customer1_Cleaned,Customer2_Cleaned)
+  # JOINED_Customer2=rbind(JOINED_Customer,Customer3_Cleaned)
+  # JOINED_Customer3=rbind(JOINED_Customer2,Customer4_Cleaned)
+  # JOINED_CustomerFINAL=rbind(JOINED_Customer3,Customer5_Cleaned)
+  # 
+  # saveRDS(JOINED_CustomerFINAL, "Customer_Final.rds")
+        
+  # #These columns were not correctly dropped
+  # FINALLY_Customer_Ready$CustomerAddress <- NULL
+  # FINALLY_Customer_Ready$CreatedBy <- NULL
+  # FINALLY_Customer_Ready$CreatedDate <- NULL
+  # FINALLY_Customer_Ready$CustomerCity <- NULL
+  # FINALLY_Customer_Ready$C1 <- NULL
+  # FINALLY_Customer_Ready[FINALLY_Customer_Ready$CustomerSSN=="",] <- NA
+  # colnames(FINALLY_Customer_Ready)[c(1,2)] = c("EventId","EventDateId")
+          
+  # #TO FIX THE ZIP-CODES!
+  # FINALLY_Customer_Ready$CustomerZipCode = as.numeric(as.character((FINALLY_Customer_Ready$CustomerZipCode)))
+  # FINALLY_Customer_Ready=na.omit(FINALLY_Customer_Ready)
+  # FINALLY_Customer_Ready[FINALLY_Customer_Ready$CustomerZipCode>902,] <- NA
+  # FINALLY_Customer_Ready=na.omit(FINALLY_Customer_Ready)
+  # FINALLY_Customer_Ready[FINALLY_Customer_Ready$CustomerZipCode<101,] <- NA
+  # FINALLY_Customer_Ready=na.omit(FINALLY_Customer_Ready)
+       
+  # SaleItemReduced[SaleItemReduced$SaleId==737335,]
+  # TicketReduced[TicketReduced$TicketId==33444944,]
+  # 
+  # as.numeric(as.character((FINALLY_Customer_Ready$CustomerZipCode[3])))
+  # FINALLY_Customer_Ready = na.omit(FINALLY_Customer_Ready)
+       
+  #saveRDS(FINALLY_Customer_Ready, "Customer_FinalUSE_FINAL.rds") #Saving final version of Customer Table
+       
+  # #Creating seperate columns for each genre for a unique EventId
+  # EventGenre_test2 = unique(EventGenre$EventId)
+  # ImprovedEventGenre=array(0,c(3797,7))
+  # holdingVec=c()
+  # for (i in 1:3797){
+  #   holdingVec=EventGenre[EventGenre$EventId==EventGenre_test2[i],"EventGenreId"]
+  #   ImprovedEventGenre[i,1]=EventGenre_test2[i]
+  #   for (j in 1:length(holdingVec)){
+  #     ImprovedEventGenre[i,j+1]=holdingVec[j]
+  #   }
+  # }
+  # colnames(ImprovedEventGenre)[c(1,2,3,4,5,6,7)] <- c("EventId","Genre1","Genre2","Genre3","Genre4","Genre5","Genre6","Genre7")
+
+  #saveRDS(ImprovedEventGenre,"ImprovedEventGenre.rds") #Saving the ImprovedEventGenre
+        
+  #duplicated(FINALLY_Customer_Ready$CustomerId)
+
+##---------------------------------------------------------------##
+#                    LOAD CREATED RDS TABLES                      #
+##---------------------------------------------------------------##
+
+# genreDemographics = readRDS("genreDemographics.rds")
+# SaleItem = readRDS("SaleItem.rds")
+# Sale = readRDS("Sale.rds")
+# Ticket = readRDS("Ticket.rds")
+# FINALLY_Customer_Ready = readRDS("Customer_FinalUSE_FINAL.rds")
+
+
+#--------------Keep only three last years---------------# 
+
+# Sale$CreatedDate = as.Date(Sale$CreatedDate, "%Y-%m-%d %H:%M:%S")
+# SaleReduced <- Sale[Sale$CreatedDate > as.Date("2013-01-01"),]
+# 
+# SaleItem$CreatedDate = as.Date(SaleItem$CreatedDate, "%Y-%m-%d %H:%M:%S")
+# SaleItemReduced <- SaleItem[SaleItem$CreatedDate > as.Date("2013-01-01"),]
+# 
+# Ticket$CreatedDate = as.Date(Ticket$CreatedDate, "%Y-%m-%d %H:%M:%S")
+# TicketReduced <- Ticket[Ticket$CreatedDate > as.Date("2013-01-01"),]
+# TicketReducedUSE <- TicketReduced[,c("TicketId","TicketStatusId")]
+
+
+#------------------- Merging Tables --------------------#
+
+# Sale_Merge_SaleItem = merge(SaleReduced,SaleItemReduced, by="SaleId") 
+# Sale_SaleItem_Merge_Ticket = merge(Sale_Merge_SaleItem,TicketReducedUSE, by="TicketId")
+
+
+#--------------Cleaning Merged Tables-------------------# 
+
+# # Cleaning Sale_Merge_SaleItem
+# Sale_Merge_SaleItem$SourceId.y <- NULL
+# Sale_Merge_SaleItem$CreatedDate.y <- NULL
+# Sale_Merge_SaleItem$GiftcardId <- NULL
+# Sale_Merge_SaleItem$SubscriptionId <- NULL
+# Sale_Merge_SaleItem$ProductId <- NULL
+# Sale_Merge_SaleItem$SaleItemId <- NULL
+
+# # Cleaning Sale_SaleItem_Merge_Ticket
+# colnames(Sale_SaleItem_Merge_Ticket)[3] <- "SourceId"
+# colnames(Sale_SaleItem_Merge_Ticket)[10] <- "CreatedDate"
+# Sale_SaleItem_Merge_Ticket$SaleItemAmount <- NULL
+# Sale_SaleItem_Merge_Ticket$SaleItemDiscount <- NULL
+# 
+# Sale_SaleItem_Merge_Ticket$SaleAmount[15]+Sale_SaleItem_Merge_Ticket$TotalDiscount[15]
+
+
+# Sale_SaleItem_Merge_Ticket=na.omit(Sale_SaleItem_Merge_Ticket)
+# Sale_SaleItem_Merge_Ticket[(Sale_SaleItem_Merge_Ticket$SaleAmount+Sale_SaleItem_Merge_Ticket$TotalDiscount)==0,] <- NA
+# Sale_SaleItem_Merge_Ticket=na.omit(Sale_SaleItem_Merge_Ticket)
+# Sale_SaleItem_Merge_Ticket = Sale_SaleItem_Merge_Ticket[!DUP_Test,]
+# Sale_SaleItem_Merge_Ticket$TicketExpires <- NULL
+# Sale_SaleItem_Merge_Ticket$DeliveryTypeId.y <- NULL
+# Sale_SaleItem_Merge_Ticket$SourceId.y  <-  NULL
+
+#--------------Saving Cleaned Merged Tables-------------# 
+
+# saveRDS(Sale_SaleItem_Merge_Ticket, "Sale_SaleItem_Merge_Ticket.rds") #SAVING FINAL VERSION OF Sale_SaleItem_Merge_Ticket
+Sale_SaleItem_Merge_Ticket=readRDS("Sale_SaleItem_Merge_Ticket.rds")
+
+
+#--------------Cleaning Merged Tables-------------------# 
+
+#----------------- Creating MasterTable-----------------#
+
+# #Creating the  MASTER_TABLES by merging them with Customer and EventGenre
+# FINAL_TABLE_NOgenre = merge(Sale_SaleItem_Merge_Ticket,FINALLY_Customer_Ready, by = "CustomerId") #Merged without Genre
+# FINAL_TABLE_WITHgenre = merge(FINAL_TABLE_NOgenre,ImprovedEventGenre, by="EventId") #Merged with Genre
+# FINAL_TABLE_USING_OTHER <- sqldf("SELECT * FROM Sale_SaleItem_Merge_Ticket LEFT JOIN FINALLY_Customer_Ready USING(CustomerId)")
+# FINAL_TABLE[1:50,]
+# Sale_SaleItem_Merge_Ticket[Sale_SaleItem_Merge_Ticket$SaleId==916579,]
+# saveRDS(FINAL_TABLE_NOgenre,"MASTER_TABLE.rds") #SAVING FINAL_TABLE_NOgenre
+# saveRDS(FINAL_TABLE_WITHgenre, "MASTER_TABLE_Use.rds") #FINAL_TABLE_WITHgenre
+# #Final_Table_testRead=readRDS("FINAL_TABLE.rds")
+# FINAL_TABLE_WITHgenre[7:9,]
+
+#-------------------Load Master Tables -----------------#
+FINAL_TABLE_NOgenre=readRDS("MASTER_TABLE.rds")
+FINAL_TABLE_WITHgenre=readRDS("MASTER_TABLE_Use.rds")
+
+
+#----------------- Further Cleaning---------------------#
+
+FINAL_TABLE_WITHgenre=dplyr::distinct(FINAL_TABLE_WITHgenre, EventId,CustomerSSN,Genre1,Genre2,Genre3,Genre4,Genre5,Genre6,.keep_all =T)
+
+#colnames(FINAL_TABLE_WITHgenre)[c(5,10)] = c("SourceId","UserGroupId")
+#colnames(FINAL_TABLE_WITHgenre)[5] = "SourceId"
+
+FINAL_TABLE_WITHgenre$TicketStatusId <- NULL
+FINAL_TABLE_WITHgenre$IsRefunded  <- NULL
+FINAL_TABLE_WITHgenre$EventDateId  <- NULL
+FINAL_TABLE_WITHgenre$TicketId  <- NULL
+
+#------------------Extract Gender Data -----------------#
+
+#FINAL_TABLE_WITHgenre$gender=NA
+#FINAL_TABLE_WITHgenre$gender[grep("son",FINAL_TABLE_WITHgenre$CustomerName)]=1
+#FINAL_TABLE_WITHgenre$gender[grep("óttir",FINAL_TABLE_WITHgenre$CustomerName)]=0
+#FINAL_TABLE_WITHgenre$gender[grep("ótir",FINAL_TABLE_WITHgenre$CustomerName)]=0
+#FINAL_TABLE_WITHgenre$gender[grep("ottir",FINAL_TABLE_WITHgenre$CustomerName)]=0
+#FINAL_TABLE_WITHgenre$gender[grep("otir",FINAL_TABLE_WITHgenre$CustomerName)]=0
+
+
+FINAL_TABLE_WITHgenre$SourceId.y <- NULL
+FINAL_TABLE_WITHgenre$UserGroupId.x <- NULL
+FINAL_TABLE_WITHgenre$UserGroupId.y <- NULL
+
+
+FINAL_TABLE_WITHgenre$CustomerName=str_trim(as.character(FINAL_TABLE_WITHgenre$CustomerName),side=c("right"))
+FINAL_TABLE_WITHgenre$gender=NA
+FINAL_TABLE_WITHgenre$gender[grep("son",substr(FINAL_TABLE_WITHgenre$CustomerName,nchar(as.character(FINAL_TABLE_WITHgenre$CustomerName))-2,
+					nchar(as.character(FINAL_TABLE_WITHgenre$CustomerName))),ignore.case=TRUE)]=1
+FINAL_TABLE_WITHgenre$gender[grep("dottir",FINAL_TABLE_WITHgenre$CustomerName,,ignore.case=TRUE)]=0
+FINAL_TABLE_WITHgenre$gender[grep("dóttir",FINAL_TABLE_WITHgenre$CustomerName,,ignore.case=TRUE)]=0
+FINAL_TABLE_WITHgenre=na.omit(FINAL_TABLE_WITHgenre)
+
+##saveRDS(FINAL_TABLE_WITHgenre,"Temp_For_Trying_Algorithms.rds")
+
+
+#------------------Extract Birthday data ---------------#
+
+FINAL_TABLE_WITHgenre$BirthDate<-as.Date(paste(substr(FINAL_TABLE_WITHgenre$CustomerSSN,1,2),
+                                               substr(FINAL_TABLE_WITHgenre$CustomerSSN,3,4),
+                                               ifelse(as.numeric(substr(FINAL_TABLE_WITHgenre$CustomerSSN, 10,10))==9,
+                                               as.numeric(substr(FINAL_TABLE_WITHgenre$CustomerSSN, 5,6))+1900,
+ 					       as.numeric(substr(FINAL_TABLE_WITHgenre$CustomerSSN, 5,6))+2000),sep="/"),"%d/%m/%Y")
+
+
+#------------------Extract and clean Age-----------------#
+
+FINAL_TABLE_WITHgenre$Age<-round(as.numeric(as.Date("2016-01-01")-as.Date(FINAL_TABLE_WITHgenre$BirthDate),unit="days")/365.242199)
+FINAL_TABLE_WITHgenre=na.omit(FINAL_TABLE_WITHgenre)
+
+FINAL_TABLE_WITHgenre[FINAL_TABLE_WITHgenre$Age<=0,]=NA
+FINAL_TABLE_WITHgenre=na.omit(FINAL_TABLE_WITHgenre)
+
+FINAL_TABLE_WITHgenre[as.numeric(substr(FINAL_TABLE_WITHgenre$CustomerSSN,10,10))!=9
+	 & as.numeric(substr(FINAL_TABLE_WITHgenre$CustomerSSN,10,10))!=0,]=NA
+FINAL_TABLE_WITHgenre=na.omit(FINAL_TABLE_WITHgenre)
+
+
+FINAL_TABLE_WITHgenre = FINAL_TABLE_WITHgenre[FINAL_TABLE_WITHgenre$Age >= 10,]
+colnames(FINAL_TABLE_WITHgenre)[4] <- "SourceId"
+
+
+
+##------------------- Attendance Matrix Generation -------------------##
+
+
+# Function Inputs
+# MasterTable - MasterTable as sent by Ian (MasterTableVer1.RDS)
+# Event ID - EventID of the Event
+# Function Outputs
+# attendenceMatrix - 2 x 105318 column matrix, w/ SSN in column 1 and that users attendence 1/0 in column 2
+attendenceGenerator <- function(masterTable, EventID) {
+  
+  # Since the masterTable has been manipulated, factor levels need to be updated (you do this by casting to char and back to factor)
+  ssnList <- data.frame(levels(as.factor(as.character(masterTable$CustomerSSN))))
+  
+  attendenceMaster <- dplyr::filter(masterTable, EventId == EventID)
+  
+  attendingSSNs <- data.frame(attendenceMaster$CustomerSSN)
+  attendingSSNs[,2] <- rep(1, length(attendingSSNs[,1]))
+  
+  # Rename column names for consistency
+  colnames(ssnList)[1] <- "CustomerSSN"
+  colnames(attendingSSNs)[1] <- "CustomerSSN"
+  
+  attendenceMatrix <- dplyr::left_join(ssnList, attendingSSNs, by = "CustomerSSN")
+  
+  attendenceMatrix[is.na(attendenceMatrix)] <- 0
+  
+  return(attendenceMatrix)
+}
+##---------------------------------------------------------------##
+#                  EXTRACTING CUSTOMER PROFILES                   #
+##---------------------------------------------------------------##
+
+MASTER_TABLE <- readRDS("MasterTableVer1_2.rds")
+
+
+
+#-----Compute most used Delivery Type by CustomerSSN-----#
+
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+DeliveryType<-MASTER_TABLE[,c("CustomerSSN","DeliveryTypeId")]
+DeliveryType<-DeliveryType %>% group_by(CustomerSSN) %>% mutate(FavoriteDeliveryType=Mode(DeliveryTypeId))
+DeliveryType$DeliveryTypeId<-NULL
+DeliveryType<-DeliveryType %>% distinct(CustomerSSN, .keep_all = TRUE)
+# data.frame(table(DeliveryType$FavoriteDeliveryType))
+
+#-----Compute most used Delivery Type by CustomerSSN-----#
+
+AveragePurchase<-MASTER_TABLE[,c("CustomerSSN","SaleAmount","TotalDiscount")]
+AveragePurchase<-AveragePurchase %>% group_by(CustomerSSN) %>% mutate(AveragePurchase=mean(SaleAmount+TotalDiscount))
+AveragePurchase$SaleAmount<-NULL
+AveragePurchase$TotalDiscount<-NULL
+AveragePurchase<-AveragePurchase %>% distinct(CustomerSSN, .keep_all = TRUE)
+
+#--------------Compute most used SoldByWeb------------#
+
+PurchaseChannel<-MASTER_TABLE[,c("CustomerSSN","SoldByWeb")]
+PurchaseChannel<-PurchaseChannel %>% group_by(CustomerSSN) %>% mutate(PurchaseChannel=sum(SoldByWeb == "True")/length(SoldByWeb))
+PurchaseChannel$SoldByWeb<-NULL
+PurchaseChannel<-PurchaseChannel %>% distinct(CustomerSSN, .keep_all = TRUE)
+
+
+#--------------Compute the most liked Genres-------------#
+
+FavoriteGenres<-MASTER_TABLE[,c("CustomerSSN","Genre1","Genre2","Genre3","Genre4","Genre5","Genre6")]
+FavoriteGenres<-tidyr::gather(FavoriteGenres,Name,Genres,2:7)
+FavoriteGenres$Name<-NULL
+FavoriteGenres<-dplyr::filter(FavoriteGenres,Genres!=0)
+FavoriteGenres<-FavoriteGenres %>% group_by(CustomerSSN) %>% mutate(FavoriteGenre=Mode(Genres))
+FavoriteGenres$Genres<-NULL
+FavoriteGenres<-FavoriteGenres %>% distinct(CustomerSSN, .keep_all = TRUE)
+
+#--------------Creating the Customer Profile-------------#
+
+CustomerProfile<-MASTER_TABLE[,c("CustomerSSN","Age","gender","CustomerZipCode")]
+CustomerProfile<-CustomerProfile %>% distinct(CustomerSSN, .keep_all = TRUE)
+CustomerProfile<-dplyr::inner_join(CustomerProfile,DeliveryType,by="CustomerSSN")
+CustomerProfile<-dplyr::inner_join(CustomerProfile,AveragePurchase,by="CustomerSSN")
+CustomerProfile<-dplyr::inner_join(CustomerProfile,PurchaseChannel,by="CustomerSSN")
+CustomerProfile<-dplyr::inner_join(CustomerProfile,FavoriteGenres,by="CustomerSSN")
+CustomerProfile$Age<-scale(CustomerProfile$Age)
+CustomerProfile$Age<-as.numeric(CustomerProfile$Age)
+CustomerProfile$AveragePurchase<-scale(CustomerProfile$AveragePurchase)
+CustomerProfile$AveragePurchase<-as.numeric(CustomerProfile$AveragePurchase)
+
+#------------------Plot interesting features-------------#
+library(ggplot2)
+qplot(CustomerProfile$Age,geom="histogram",fill="red")
+qplot(CustomerProfile$gender,geom="histogram",binwidth=0.5)
+qplot(CustomerProfile$FavoriteGenre,geom="histogram",bins=98)
+
+##---------------------------------------------------------------##
+#                  EXTRACTING EVENT    PROFILES                   #
+##---------------------------------------------------------------##
+
+
+#-------Compute the AverageAge for Each Event------------#
+
+EventAge<-MASTER_TABLE[,c("EventId","Age")]
+EventAge<-EventAge %>% group_by(EventId) %>% mutate(AverageAge=mean(Age))
+EventAge$Age<-NULL
+EventAge<-EventAge %>% distinct(EventId, .keep_all = TRUE)
+
+
+#-------Compute the AverageGender for Each Event---------#
+
+EventGender<-MASTER_TABLE[,c("EventId","gender")]
+EventGender<-EventGender %>% group_by(EventId) %>% mutate(PercentageGender=sum(gender==1)/length(gender))
+EventGender$gender<-NULL
+EventGender<-EventGender %>% distinct(EventId, .keep_all=TRUE)
+
+#-----Compute the mostOccuringZIPCODE for Each Event-----#
+
+EventZip<-MASTER_TABLE[,c("EventId","CustomerZipCode")]
+EventZip<-EventZip %>% group_by(EventId) %>% mutate(ZIP=Mode(CustomerZipCode))
+EventZip$CustomerZipCode<-NULL
+EventZip<-EventZip %>% distinct(EventId,.keep_all=TRUE)
+
+#---------------Compute AverageDeliveryType---------------#
+
+EventDelivery<-MASTER_TABLE[,c("EventId","DeliveryTypeId")]
+EventDelivery<-EventDelivery %>% group_by(EventId) %>% mutate(Delivery=Mode(DeliveryTypeId))
+EventDelivery$DeliveryTypeId<-NULL
+EventDelivery<-EventDelivery %>% distinct(EventId, .keep_all=TRUE)
+
+#---------------Compute AverageDeliveryType---------------#
+
+EventPrice<-MASTER_TABLE[,c("EventId","SaleAmount","TotalDiscount")]
+EventPrice<-EventPrice %>% group_by(EventId) %>% mutate(Price=mean(SaleAmount-TotalDiscount))
+EventPrice$SaleAmount<-NULL
+EventPrice$TotalDiscount<-NULL
+EventPrice<-EventPrice %>% distinct(EventId, .keep_all=TRUE)
+
+#--------------Compute the SoldbyWeb percentage------------#
+
+EventWeb<-MASTER_TABLE[,c("EventId","SoldByWeb")]
+EventWeb<-EventWeb %>% group_by(EventId) %>% mutate(PercentageWeb=sum(SoldByWeb=="True")/length(SoldByWeb))
+EventWeb$SoldByWeb<-NULL
+EventWeb<-EventWeb %>% distinct(EventId, .keep_all=TRUE)
+
+#--------------Genres of each Event------------------------#
+
+EventGenres<-MASTER_TABLE[,c("EventId","Genre1","Genre2")]
+EventGenres<-EventGenres %>% distinct(EventId, .keep_all=TRUE)
+
+#---------------Number of Ticket Sold----------------------#
+
+EventSold<-MASTER_TABLE[,c("EventId","CustomerName")]
+EventSold<-EventSold %>% group_by(EventId) %>% mutate(Numberofticketssold=length(CustomerName))
+EventSold$CustomerName<-NULL
+EventSold<-EventSold %>% distinct(EventId,.keep_all=TRUE)
+
+
+#-------------Join tables to produce EventProfile---------#
+EventProfile<-dplyr::inner_join(EventAge,EventGender,by="EventId")
+EventProfile<-dplyr::inner_join(EventProfile,EventZip,by="EventId")
+EventProfile<-dplyr::inner_join(EventProfile,EventDelivery,by="EventId")
+EventProfile<-dplyr::inner_join(EventProfile,EventPrice,by="EventId")
+EventProfile<-dplyr::inner_join(EventProfile,EventWeb,by="EventId")
+EventProfile<-dplyr::inner_join(EventProfile,EventGenres,by="EventId")
+EventProfile<-dplyr::inner_join(EventProfile,EventSold,by="EventId")
+EventProfile$EventId<-NULL
+
+
+
+qplot(EventProfile$PercentageGender,geom="histogram")
+
+
+
+
+##---------------------------------------------------------------##
+#                    		ALGORITHM                         #
+##---------------------------------------------------------------##
+
+
+#---- Split into Training, Validation and Test Data ------#
+
+
+# Function genderates a list allData
+# Element1 - Training Data [50%]
+# Element2 - Validation Data [25%]
+# Element3 - Test Data [25%]
+
+allDataCreator <- function(masterTable, genreDemographics, EventID) {
+  
+  attendence <- attendenceGenerator(masterTable, EventID)
+  
+  labledData <- dplyr::inner_join(attendence, genreDemographics, by = "CustomerSSN")
+  
+  # Gets Genres for a specific EventID 
+  genres <- dplyr::transmute(masterTable, EventId, Genre1, Genre2, Genre3, Genre4, Genre5, Genre6) 
+			%>% dplyr::filter(EventId == EventID) %>% dplyr::distinct() 
+  genres <- as.numeric(genres[1,])[-1]
+  genres <- genres[genres != 0]
+  
+  attended <- dplyr::filter(labledData, V2 == 1)
+  notAttended <- dplyr::filter(labledData, V2 == 0)
+  
+  # 98 Genres
+  blankAttended <- data.frame(mat.or.vec(nrow(attended), 98))
+  blankAttended[, genres] <- -1
+  
+  # Ticket Portion of attended is columns 6 - 103, blankAttended has -1 in genres that represent the event
+  attended[,6:103] <- attended[,6:103] + blankAttended
+  
+  labledData <- rbind(attended, notAttended)
+  labledData <- labledData[sample(nrow(genreDemographics)),]
+  
+  # Need to scale ticket purchases
+  labledData[, c(4,6:103)] <- scale(labledData[, c(4,6:103)])
+  
+  # There are some genres where no-one bought tickets.  Scaling them puts an NA in that column
+  labledData[is.na(labledData)] <- 0
+  
+  # drop SSNs (no longer needed as key)
+  labledData <- labledData[,-1]
+  
+  # 1 - Training, 2 - Validation, 3 - Test
+  labledData$class <- sample(c(1,1,2,3), nrow(labledData), replace = TRUE)
+  
+  trainingData <- dplyr::filter(labledData, class == 1)
+  validationData <- dplyr::filter(labledData, class == 2)
+  testData <- dplyr::filter(labledData, class == 3)
+  
+  return(list(trainingData, validationData, testData))
+}
+
+
+#------------ Analytics: LASSO Regression ----------------#
+
+
+initialize <- function() {
+  
+  masterTable <- readRDS("MasterTableVer1_2.rds")
+  genreMatrix <- readRDS("genreMatrixV2.rds")
+  
+  return(list(masterTable, genreMatrix))
+}
+
+
+# Logistic LASSO Regression
+# Inputs:
+# allData - List:
+# Element1 - Training Data [50%]
+# Element2 - Validation Data [25%]
+# Element3 - Test Data [25%]
+logisticLasso <- function(allData) {
+  
+  threshold <- .5
+  
+  trainingData <- allData[[1]]
+  validationData <- allData[[2]]
+  testData <- allData[[3]]
+  
+  modMatrix <- model.matrix(V2~., data = trainingData)
+  
+  print("Training Logistic LASSO")
+  
+  lassoReg <- glmnet(modMatrix, trainingData[,1], family = "binomial", alpha = 1, maxit=100000)
+  
+  print("Logistic LASSO Complete")
+  
+  # savingRDS for further examination
+  saveRDS(lassoReg, "lassoReg.RDS")
+  
+  lambdaList <- lassoReg$lambda
+  
+  # Column 1 contains Total Accuracy, Column 2 Contains AUC
+  resultsMat <- data.frame(mat.or.vec(length(lambdaList), 2))
+  
+  # List of ROCs to be saved to RDS
+  rocList <- list()
+  
+  validationModel <- model.matrix(V2~., data = validationData)
+  
+  for(i in 1:length(lambdaList)) {
+    
+    # For some reason there is a second intercept = 0 that needs to be removed 
+    coefficients <- as.numeric(coef(lassoReg, lambdaList[i]))[-2]
+    
+    logOdds <- validationModel %*% coefficients
+    probabilities <- as.numeric(exp(logOdds) / (1 + exp(logOdds)))
+    
+    prediction <- ifelse(probabilities > threshold, 1, 0)
+    
+    correct <- prediction == validationData[,1]
+    resultsMat[i, 1] <- sum(correct) / length(correct)
+    
+    rocCurve <- roc(validationData[,1], probabilities)
+    aucNum <- pROC::auc(rocCurve)[1]
+    
+    rocList[[i]] <- rocCurve
+    
+    resultsMat[i, 2] <- aucNum
+    
+    print(paste("TEST", as.character(i)))
+  }
+  
+  # Save rocList for charting and examination
+  saveRDS(rocList, "rocList.rds")
+  
+  resultsMat <- cbind(data.frame(lambdaList), resultsMat)
+  colnames(resultsMat) <- c("Lambda", "TotalAcc", "AUC")
+  
+  return(resultsMat)
+}
+
+
+
+
+# Function creates an array of Lambdas for LASSO Regression
+lambdaListGenerator <- function() {
+  
+  a <- 0
+  b <- seq(.000001, .00001, .000001)
+  c <- seq(.00002, .0001, .00001)
+  d <- seq(.0002, .001, .0001)
+  e <- seq(.002, .01, .001)
+  f <- seq(.02, .1, .01)
+  g <- seq(.2, 1, .1)
+  h <- seq(2, 10, 1)
+  i <- seq(20, 100, 10)
+  
+  lambdaList <- append(a,b)
+  lambdaList <- append(lambdaList,c)
+  lambdaList <- append(lambdaList,d)
+  lambdaList <- append(lambdaList,e)
+  lambdaList <- append(lambdaList,f)
+  lambdaList <- append(lambdaList,g)
+  lambdaList <- append(lambdaList,h)
+  lambdaList <- append(lambdaList,i)
+  
+  return(lambdaList)
+}
+
+# Function returns a data frame of the coefficients for a specific lambda
+rankedCoefficients <- function(lassoReg, lambda) {
+  
+  lambdaList <- lambdaListGenerator()
+  
+  coefi <- coef(lassoReg, lambda)
+  
+  rankedCoefi <- cbind(rownames(coefi)[order(coefi, decreasing = TRUE)], coefi[order(coefi, decreasing = TRUE)])
+  
+  rankedCoefi <- data.frame(rankedCoefi)
+  
+  # Names Columns
+  colnames(rankedCoefi) <- c("CoefName", "CoefValue")
+  
+  # Drops Zeros
+  rankedCoefi <- dplyr::filter(rankedCoefi, CoefValue != "0")
+  
+  return(rankedCoefi)
+}
+
+
+ 
+ 
+
+
